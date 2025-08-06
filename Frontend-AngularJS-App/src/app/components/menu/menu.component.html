@@ -1,0 +1,340 @@
+<div class="menu-container">
+  <!-- Header with Table Info -->
+  <div class="menu-header">
+    <div class="header-top">
+      <button (click)="goBack()" class="back-btn">
+        ← Back
+      </button>
+      <div class="table-info">
+        <h1>🍔 Hesburger Menu</h1>
+        <p>Table {{ tableId }}</p>
+      </div>
+      <button (click)="goToCart()" class="cart-btn">
+        🛒 <span class="cart-count" *ngIf="cartItemCount > 0">{{ cartItemCount }}</span>
+      </button>
+    </div>
+    
+    <!-- Search Bar -->
+    <div class="search-container">
+      <input 
+        type="text" 
+        placeholder="🔍 Search menu..." 
+        [(ngModel)]="searchTerm"
+        (input)="onSearch($event)"
+        class="search-input">
+    </div>
+  </div>
+
+  <!-- 🐛 DEBUG SECTION - Remove after confirming it works -->
+  <div *ngIf="isDevelopment()" class="debug-alert">
+    <h4>🔒 CATEGORIES DEBUG</h4>
+    <div class="debug-status">
+      <strong>Categories Count:</strong> {{ categories?.length || 'ERROR' }} 
+      <span *ngIf="categories?.length === 7" class="debug-success">✅ PERFECT</span>
+      <span *ngIf="categories?.length !== 7" class="debug-error">❌ BROKEN</span>
+    </div>
+    
+    <div class="debug-categories">
+      <div *ngFor="let cat of categories; let i = index" class="debug-cat">
+        {{ i + 1 }}. {{ cat?.icon }} {{ cat?.name }} ({{ cat?.id }})
+      </div>
+    </div>
+    
+    <button *ngIf="categories?.length !== 7" 
+            (click)="emergencyRestoreCategories()" 
+            class="debug-emergency-btn">
+      🚨 EMERGENCY RESTORE CATEGORIES
+    </button>
+  </div>
+
+  <!-- Categories Navigation -->
+  <div class="categories-nav">
+    <div class="categories-scroll">
+      <button 
+        *ngFor="let category of categories; trackBy: trackByCategoryId"
+        (click)="selectCategory(category.id)"
+        [class.active]="selectedCategory === category.id"
+        class="category-btn">
+        <span class="category-icon">{{ category.icon }}</span>
+        <span class="category-name">{{ category.name }}</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-state" *ngIf="isLoadingProducts">
+    <div class="loading-spinner">🔄</div>
+    <p>Loading delicious menu items...</p>
+  </div>
+
+  <!-- Error State -->
+  <div class="error-state" *ngIf="errorMessage && !isLoadingProducts">
+    <div class="error-icon">⚠️</div>
+    <h3>{{ errorMessage }}</h3>
+    <button (click)="retryLoadData()" class="btn secondary">
+      🔄 Retry
+    </button>
+  </div>
+
+  <!-- Products Grid -->
+  <div class="products-section" *ngIf="!isLoadingProducts">
+    <div class="section-header" *ngIf="selectedCategory !== 'all'">
+      <h2>{{ getCategoryName(selectedCategory) }}</h2>
+      <p>{{ filteredProducts.length }} items available</p>
+    </div>
+
+    <div class="products-grid">
+      <div 
+        *ngFor="let product of filteredProducts; trackBy: trackByProductId" 
+        class="product-card"
+        [class.popular]="product.isPopular">
+        
+        <!-- Popular Badge -->
+        <div class="popular-badge" *ngIf="product.isPopular">
+          ⭐ Popular
+        </div>
+        
+        <!-- Product Image - CORS SAFE VERSION -->
+        <div class="product-image">
+          <!-- FIXED: Removed crossorigin attribute to prevent CORS issues -->
+          <img 
+            [src]="getImageUrl(product)" 
+            [alt]="product.name"
+            loading="lazy"
+            (error)="onImageError($event, product)"
+            (load)="onImageLoad($event, product)"
+            [class.image-loading]="isImageLoading(product.id)"
+            [class.image-error]="hasImageError(product.id)"
+            referrerpolicy="no-referrer">
+          
+          <!-- Image Loading State -->
+          <div class="image-placeholder" *ngIf="isImageLoading(product.id)">
+            <div class="loading-icon">📸</div>
+            <small>Loading image...</small>
+          </div>
+          
+          <!-- Image Error State -->
+          <div class="image-placeholder" *ngIf="hasImageError(product.id)">
+            <div class="error-icon">🖼️</div>
+            <small>Using placeholder</small>
+          </div>
+          
+          <!-- Image Source Debug (development only) -->
+          <div *ngIf="isDevelopment()" class="image-debug-overlay">
+            <small>{{ getImageSource(product) }}</small>
+          </div>
+          
+          <!-- Quick Add Button -->
+          <button 
+            (click)="addToCart(product)" 
+            class="quick-add-btn"
+            [disabled]="!hasValidPrice(product)"
+            [title]="hasValidPrice(product) ? 'Add to cart' : 'Price not available'">
+            + Add
+          </button>
+        </div>
+
+        <!-- Product Info -->
+        <div class="product-info">
+          <div class="product-header">
+            <h3 class="product-name">{{ product.name }}</h3>
+            <span class="product-price" 
+                  [class.price-unavailable]="!hasValidPrice(product)">
+              {{ getPriceDisplayText(product) }}
+            </span>
+            <!-- Debug Price (only in development) -->
+            <span *ngIf="isDevelopment()" 
+                  class="debug-price" 
+                  (click)="debugProductPrice(product)"
+                  title="Click for price debug">
+              🔍
+            </span>
+          </div>
+          
+          <p class="product-description">{{ product.description }}</p>
+          
+          <!-- Product Meta -->
+          <div class="product-meta">
+            <div class="meta-item" *ngIf="product.estimatedTime">
+              <span class="meta-icon">⏱️</span>
+              <span class="meta-text">{{ product.estimatedTime }} min</span>
+            </div>
+            
+            <div class="meta-item" *ngIf="hasAllergens(product)">
+              <span class="meta-icon">⚠️</span>
+              <span class="meta-text">{{ getAllergensText(product) }}</span>
+            </div>
+            
+            <!-- Location Prices Debug (only in development) -->
+            <div class="meta-item" *ngIf="isDevelopment() && product.locationPrices && product.locationPrices.length > 0">
+              <span class="meta-icon">📍</span>
+              <span class="meta-text">{{ product.locationPrices.length }} locations</span>
+            </div>
+            
+            <!-- Image Debug (only in development) -->
+            <div class="meta-item" *ngIf="isDevelopment() && product.imageUid">
+              <span class="meta-icon">🖼️</span>
+              <span class="meta-text" 
+                    (click)="debugImageUrl(product)"
+                    title="Click for image debug"
+                    style="cursor: pointer;">
+                {{ getImageSource(product) }}
+              </span>
+            </div>
+
+            <!-- Availability Status -->
+            <div class="meta-item" *ngIf="!product.isAvailable">
+              <span class="meta-icon">🚫</span>
+              <span class="meta-text unavailable">Currently unavailable</span>
+            </div>
+          </div>
+
+          <!-- Add to Cart Section -->
+          <div class="product-actions">
+            <!-- Quantity Controls (when product is in cart) -->
+            <div class="quantity-controls" *ngIf="getProductQuantityInCart(product.id) > 0">
+              <button 
+                (click)="updateProductQuantity(product, getProductQuantityInCart(product.id) - 1)"
+                class="quantity-btn minus"
+                aria-label="Decrease quantity">
+                −
+              </button>
+              <span class="quantity-display" 
+                    [attr.aria-label]="'Quantity: ' + getProductQuantityInCart(product.id)">
+                {{ getProductQuantityInCart(product.id) }}
+              </span>
+              <button 
+                (click)="updateProductQuantity(product, getProductQuantityInCart(product.id) + 1)"
+                class="quantity-btn plus"
+                aria-label="Increase quantity">
+                +
+              </button>
+            </div>
+            
+            <!-- Add to Cart Button (when product is not in cart) -->
+            <button 
+              *ngIf="getProductQuantityInCart(product.id) === 0"
+              (click)="addToCart(product)" 
+              class="add-to-cart-btn"
+              [disabled]="!hasValidPrice(product) || !product.isAvailable"
+              [attr.aria-label]="'Add ' + product.name + ' to cart'">
+              <span class="btn-icon">🛒</span>
+              <span class="btn-text">
+                <ng-container *ngIf="!product.isAvailable">Unavailable</ng-container>
+                <ng-container *ngIf="product.isAvailable && !hasValidPrice(product)">Price N/A</ng-container>
+                <ng-container *ngIf="product.isAvailable && hasValidPrice(product)">Add to Cart</ng-container>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="filteredProducts.length === 0 && !isLoadingProducts">
+      <div class="empty-icon">🔍</div>
+      <h3>No items found</h3>
+      <p *ngIf="searchTerm && selectedCategory === 'all'">
+        No results for "<strong>{{ searchTerm }}</strong>"
+      </p>
+      <p *ngIf="searchTerm && selectedCategory !== 'all'">
+        No results for "<strong>{{ searchTerm }}</strong>" in {{ getCategoryName(selectedCategory) }}
+      </p>
+      <p *ngIf="!searchTerm && selectedCategory !== 'all'">
+        No items available in {{ getCategoryName(selectedCategory) }}
+      </p>
+      <p *ngIf="!searchTerm && selectedCategory === 'all'">
+        No menu items available at the moment
+      </p>
+      
+      <div class="empty-actions">
+        <button (click)="clearSearchAndCategory()" class="btn secondary">
+          Show All Items
+        </button>
+        <button (click)="retryLoadData()" class="btn primary">
+          🔄 Refresh Menu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Cart Summary -->
+  <div class="floating-cart" 
+       *ngIf="cartItemCount > 0" 
+       (click)="goToCart()"
+       [attr.aria-label]="'Cart: ' + cartItemCount + ' items, total ' + getFormattedCartTotal()">
+    <div class="cart-summary">
+      <div class="cart-info">
+        <span class="cart-items">
+          {{ cartItemCount }} {{ cartItemCount === 1 ? 'item' : 'items' }}
+        </span>
+        <span class="cart-total">{{ getFormattedCartTotal() }}</span>
+      </div>
+      <div class="cart-action">
+        View Cart →
+      </div>
+    </div>
+  </div>
+
+  <!-- Development Debug Panel -->
+  <div class="debug-panel" *ngIf="isDevelopment()">
+    <h4>🔧 Debug Panel</h4>
+    
+    <!-- Quick Stats -->
+    <div class="debug-stats">
+      <div class="debug-stat">
+        <strong>🔒 Categories:</strong> {{ categories.length }}/7 
+        <span [class]="categories.length === 7 ? 'debug-success' : 'debug-error'">
+          {{ categories.length === 7 ? '✅' : '❌' }}
+        </span>
+      </div>
+      <div class="debug-stat">
+        <strong>📦 Products:</strong> {{ products.length }}
+      </div>
+      <div class="debug-stat">
+        <strong>🛒 Cart:</strong> {{ cartItemCount }} items
+      </div>
+      <div class="debug-stat">
+        <strong>🖼️ Images:</strong> {{ getImageStats() }}
+      </div>
+    </div>
+    
+    <!-- Debug Actions -->
+    <div class="debug-actions">
+      <button (click)="debugApiEndpoints()" class="debug-btn">🧪 Test API</button>
+      <button (click)="debugAllPrices()" class="debug-btn">💰 Debug Prices</button>
+      <button (click)="getCategoryStats()" class="debug-btn">📊 Category Stats</button>
+      <button (click)="reloadData()" class="debug-btn">🔄 Reload Data</button>
+      <button (click)="forceReauth()" class="debug-btn">🔑 Force Re-auth</button>
+      <button (click)="emergencyRestoreCategories()" class="debug-btn emergency">
+        🚨 Fix Categories
+      </button>
+    </div>
+    
+    <!-- Current State Info -->
+    <div class="debug-info">
+      <small>
+        <strong>Current State:</strong> 
+        Category: {{ selectedCategory }} | 
+        Search: "{{ searchTerm || 'none' }}" | 
+        Filtered: {{ filteredProducts.length }} products
+      </small>
+      <br>
+      <small>
+        <strong>Loading:</strong> 
+        Products: {{ isLoadingProducts ? 'Yes' : 'No' }} | 
+        Categories: {{ isLoadingCategories ? 'Yes' : 'No' }}
+      </small>
+      <br>
+      <small>
+        <strong>Errors:</strong> 
+        {{ errorMessage || 'None' }}
+      </small>
+    </div>
+  </div>
+
+  <!-- Toast Notifications (if you want to add them later) -->
+  <div class="toast-container" id="toast-container">
+    <!-- Toasts will be dynamically added here -->
+  </div>
+</div>

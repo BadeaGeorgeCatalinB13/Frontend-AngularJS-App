@@ -1,0 +1,330 @@
+<div class="cart-container">
+  <!-- Header -->
+  <div class="cart-header">
+    <div class="header-top">
+      <button (click)="goBackToMenu()" class="back-btn">
+        ← Continue Shopping
+      </button>
+      <div class="cart-title">
+        <h1>🛒 Your Order</h1>
+        <p>Table {{ tableId }}</p>
+      </div>
+      <button (click)="clearCart()" class="clear-btn" *ngIf="hasItems()">
+        🗑️ Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- Debug Panel (only in development) -->
+  <div class="debug-panel" *ngIf="isDevelopment()" style="margin: 10px; padding: 10px; border: 1px solid #ccc; background: #f5f5f5;">
+    <h4>🔧 Debug Panel</h4>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+      <button (click)="debugCartState()" class="debug-btn">Debug Cart</button>
+      <button (click)="refreshCart()" class="debug-btn">Refresh Cart</button>
+      <button (click)="syncCartFromStorage()" class="debug-btn">Sync from Storage</button>
+      <button (click)="testCheckoutReadiness()" class="debug-btn">Test Checkout</button>
+      <button (click)="simpleCheckout()" class="debug-btn">Simple Checkout</button>
+      <button (click)="forceNavigateToCheckout()" class="debug-btn">Force Navigate</button>
+      <button (click)="testCheckoutRoute()" class="debug-btn">Test Route</button>
+    </div>
+    <div style="margin-top: 10px; font-size: 12px;">
+      <p>Component Cart: {{ cart.length }} items | Service Cart: {{ cartItemCount }} items | Total: {{ formatPrice(cartTotal) }}</p>
+    </div>
+  </div>
+
+  <!-- Empty Cart State -->
+  <div class="empty-cart" *ngIf="!hasItems()">
+    <div class="empty-icon">🛒</div>
+    <h2>Your cart is empty</h2>
+    <p>Add some delicious items from our menu!</p>
+    <button (click)="goBackToMenu()" class="btn primary">
+      🍔 Browse Menu
+    </button>
+    
+    <!-- Load Saved Order Option -->
+    <div class="saved-order-section">
+      <button (click)="loadSavedOrder()" class="btn secondary">
+        📂 Load Saved Order
+      </button>
+    </div>
+    
+    <!-- Debug info when cart is empty -->
+    <div class="debug-info" *ngIf="isDevelopment()" style="margin-top: 20px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7;">
+      <p><strong>Debug Info:</strong></p>
+      <p>Component cart length: {{ cart.length }}</p>
+      <p>Service cart count: {{ cartItemCount }}</p>
+      <p>Service cart total: {{ formatPrice(cartTotal) }}</p>
+      <button (click)="debugCartState()" class="debug-btn">Check Cart State</button>
+    </div>
+  </div>
+
+  <!-- Cart Items -->
+  <div class="cart-content" *ngIf="hasItems()">
+    
+    <!-- Order Summary Header -->
+    <div class="order-summary-header">
+      <div class="summary-stats">
+        <div class="stat-item">
+          <span class="stat-number">{{ totalItems }}</span>
+          <span class="stat-label">Items</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">{{ estimatedTime }}</span>
+          <span class="stat-label">Min</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">{{ formatPrice(finalTotal) }}</span>
+          <span class="stat-label">Total</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cart Items List -->
+    <div class="cart-items">
+      <div 
+        *ngFor="let item of cart; trackBy: trackByItemId" 
+        class="cart-item">
+        
+        <!-- Item Image (optional) -->
+        <div class="item-image" *ngIf="item.image">
+          <img [src]="item.image" [alt]="item.name" class="product-image">
+        </div>
+        
+        <!-- Item Details -->
+        <div class="item-details">
+          <div class="item-header">
+            <h3 class="item-name">{{ item.name }}</h3>
+            <button 
+              (click)="removeFromCart(item.id)" 
+              class="remove-btn"
+              title="Remove item">
+              ✕
+            </button>
+          </div>
+          
+          <p class="item-description">{{ item.description }}</p>
+          
+          <!-- Item Meta -->
+          <div class="item-meta">
+            <span class="item-price">{{ formatPrice(item.price) }} each</span>
+            <span class="item-time" *ngIf="item.estimatedTime">⏱️ {{ item.estimatedTime }} min</span>
+            <span class="item-allergens" *ngIf="hasAllergens(item)">
+              ⚠️ {{ getAllergensText(item) }}
+            </span>
+            <span class="item-popular" *ngIf="item.isPopular">⭐ Popular</span>
+          </div>
+
+          <!-- Special Instructions -->
+          <div class="special-instructions">
+            <input 
+              #instructionsInput
+              type="text" 
+              [placeholder]="'Special instructions for ' + item.name"
+              [value]="item.specialInstructions || ''"
+              (blur)="addInstructions(item.id, instructionsInput.value)"
+              class="instructions-input">
+          </div>
+        </div>
+
+        <!-- Quantity Controls -->
+        <div class="item-controls">
+          <div class="quantity-section">
+            <div class="quantity-controls">
+              <button 
+                (click)="updateQuantity(item.id, item.quantity - 1)"
+                class="quantity-btn minus"
+                [disabled]="item.quantity <= 1">
+                −
+              </button>
+              <span class="quantity-display">{{ item.quantity }}</span>
+              <button 
+                (click)="updateQuantity(item.id, item.quantity + 1)"
+                class="quantity-btn plus">
+                +
+              </button>
+            </div>
+            <div class="item-subtotal">
+              {{ formatPrice(getItemSubtotal(item)) }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Promo Code Section -->
+    <div class="promo-section">
+      <div class="promo-input-group">
+        <input 
+          #promoInput
+          type="text" 
+          placeholder="Enter promo code" 
+          class="promo-input">
+        <button 
+          (click)="applyPromoCode(promoInput.value); promoInput.value=''"
+          class="promo-btn">
+          Apply
+        </button>
+      </div>
+      <div class="promo-suggestions">
+        <span class="promo-hint">Try: SAVE10, FREE5, STUDENT</span>
+      </div>
+    </div>
+
+    <!-- Order Total Breakdown -->
+    <div class="order-totals">
+      <div class="total-line">
+        <span class="total-label">Subtotal ({{ totalItems }} items)</span>
+        <span class="total-value">{{ formatPrice(subtotal) }}</span>
+      </div>
+      
+      <div class="total-line">
+        <span class="total-label">Service Fee</span>
+        <span class="total-value">{{ formatPrice(serviceFee) }}</span>
+      </div>
+      
+      <div class="total-line" *ngIf="deliveryFee > 0">
+        <span class="total-label">Delivery Fee</span>
+        <span class="total-value">{{ formatPrice(deliveryFee) }}</span>
+      </div>
+      
+      <div class="total-line">
+        <span class="total-label">Tax ({{ (taxRate * 100) }}%)</span>
+        <span class="total-value">{{ formatPrice(taxAmount) }}</span>
+      </div>
+      
+      <div class="total-line final-total">
+        <span class="total-label">Total</span>
+        <span class="total-value">{{ formatPrice(finalTotal) }}</span>
+      </div>
+      
+      <div class="estimated-time">
+        <span class="time-icon">🕐</span>
+        <span class="time-text">Estimated time: {{ estimatedTime }} minutes</span>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+      <button (click)="saveOrderForLater()" class="action-btn secondary">
+        💾 Save for Later
+      </button>
+      <button (click)="duplicateOrder()" class="action-btn secondary">
+        📋 Duplicate Order
+      </button>
+      <button (click)="goBackToMenu()" class="action-btn secondary">
+        🍔 Add More Items
+      </button>
+    </div>
+
+    <!-- Checkout Button -->
+    <div class="checkout-section">
+      <button 
+        (click)="proceedToCheckout()"
+        class="checkout-btn"
+        [disabled]="!hasItems()">
+        <div class="checkout-content">
+          <span class="checkout-text">Proceed to Payment</span>
+          <span class="checkout-amount">{{ formatPrice(finalTotal) }}</span>
+        </div>
+        <span class="checkout-arrow">→</span>
+      </button>
+      
+      <div class="payment-methods">
+        <span class="payment-text">We accept:</span>
+        <div class="payment-icons">
+          <span class="payment-icon" title="Card Payment">💳</span>
+          <span class="payment-icon" title="Cash">💵</span>
+          <span class="payment-icon" title="Mobile Payment">📱</span>
+        </div>
+      </div>
+      
+      <!-- Order confirmation info -->
+      <div class="order-info">
+        <p class="order-note">
+          📋 Order will be prepared for <strong>Table {{ tableId }}</strong>
+        </p>
+        <p class="order-note">
+          ⏰ Estimated preparation time: <strong>{{ estimatedTime }} minutes</strong>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add debug CSS styles -->
+<style>
+  .debug-panel {
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  
+  .debug-btn {
+    padding: 5px 10px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  
+  .debug-btn:hover {
+    background: #0056b3;
+  }
+  
+  .debug-info {
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  
+  .debug-info p {
+    margin: 5px 0;
+  }
+  
+  .item-image {
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+    margin-right: 15px;
+  }
+  
+  .product-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+  
+  .cart-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  .item-popular {
+    background: #ffd700;
+    color: #333;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  
+  .quantity-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .order-info {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+  }
+  
+  .order-note {
+    margin: 5px 0;
+    font-size: 14px;
+    color: #666;
+    text-align: center;
+  }
+</style>
