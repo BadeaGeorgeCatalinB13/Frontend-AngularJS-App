@@ -1,0 +1,55 @@
+<div class="qr-scanner-container">
+  <!-- Header -->
+  <div class="scanner-header">
+    <h2>🍔 Scan QR Code</h2>
+    <p>Point your camera at the QR code on your table</p>
+  </div>
+
+  <!-- QR Scanner -->
+  <div *ngIf="isScanning" class="scanner-wrapper">
+    <div id="qr-reader" class="qr-reader"></div>
+  </div>
+
+  <!-- Scan Result -->
+  <div *ngIf="!isScanning && qrResultString" class="scan-result">
+    <div class="result-success">
+      <div class="success-icon">✅</div>
+      <h3>QR Code Scanned!</h3>
+      <p class="result-text">{{ qrResultString }}</p>
+      <div class="result-actions">
+        <button (click)="resetScanner()" class="btn secondary">
+          📷 Scan Again
+        </button>
+        <button (click)="handleQRResult(qrResultString)" class="btn primary">
+          🍽️ View Menu
+        </button>
+    </div>
+  </div>
+
+  <!-- Manual Entry Option -->
+  <div class="manual-entry">
+    <p>No QR code? <a routerLink="/menu/demo">View Demo Menu</a></p>
+    </div>
+    <!-- Test QR Simulation -->
+    <div class="test-section">
+        <h3>🧪 Test QR Scanner</h3>
+        <p>Click buttons to simulate QR scanning:</p>
+        <div class="test-buttons">
+        <button (click)="simulateQRScan('table-5')" class="btn primary">
+            📱 Scan Table 5
+        </button>
+        <button (click)="simulateQRScan('table-12')" class="btn secondary">
+            📱 Scan Table 12
+        </button>
+        <button (click)="simulateQRScan('https://restaurant.com/table/7')" class="btn secondary">
+            📱 Scan URL
+        </button>
+        </div>
+    </div>
+
+    <!-- Manual Entry Option -->
+    <div class="manual-entry">
+        <p>No QR code? <a routerLink="/menu/demo">View Demo Menu</a></p>
+    </div>
+    </div>
+</div>

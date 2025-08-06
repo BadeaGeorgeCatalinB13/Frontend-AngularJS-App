@@ -1,0 +1,816 @@
+<div class="checkout-container">
+  <!-- Header -->
+  <div class="checkout-header">
+    <button (click)="goBackToCart()" class="back-btn">
+      ← Înapoi la Coș
+    </button>
+    <h1>🛒 Finalizare Comandă</h1>
+    <p>Masa {{ tableId }}</p>
+  </div>
+
+  <!-- Debug Panel (only in development) -->
+  <div class="debug-panel" *ngIf="isDevelopment()" style="margin: 10px; padding: 10px; border: 1px solid #ccc; background: #f5f5f5;">
+    <h4>🔧 Debug Panel</h4>
+    <button (click)="forceReloadCart()" class="debug-btn">🔄 Force Reload Cart</button>
+    <button (click)="debugCartLoad()" class="debug-btn">🔍 Debug Cart</button>
+    <div style="margin-top: 10px; font-size: 12px;">
+      <p>Coș component: {{ cart.length }} produse | Service: {{ cartItemCount }} produse</p>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-overlay" *ngIf="isProcessingPayment">
+    <div class="loading-spinner">
+      <div class="spinner"></div>
+      <p>Se procesează plata...</p>
+    </div>
+  </div>
+
+  <!-- Order Confirmation -->
+  <div class="order-confirmation" *ngIf="showOrderConfirmation">
+    <div class="confirmation-content">
+      <div class="success-icon">✅</div>
+      <h2>Comanda confirmată!</h2>
+      <div class="order-details">
+        <p class="order-number">Numărul comenzii: <strong>{{ orderNumber }}</strong></p>
+        <p class="estimated-time">Timp estimat: <strong>{{ estimatedTime }} minute</strong></p>
+        <p class="table-info">Masa: <strong>{{ tableId }}</strong></p>
+      </div>
+      
+      <div class="confirmation-actions">
+        <button (click)="printReceipt()" class="btn btn-secondary">
+          🖨️ Tipărește bonul
+        </button>
+        <button (click)="downloadReceipt()" class="btn btn-secondary">
+          📥 Descarcă bonul
+        </button>
+        <button (click)="startNewOrder()" class="btn btn-primary">
+          🍔 Comandă nouă
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checkout Form -->
+  <div class="checkout-content" *ngIf="!showOrderConfirmation">
+    
+    <!-- Order Summary -->
+    <div class="order-summary" *ngIf="cart.length > 0">
+      <h2>📋 Rezumatul comenzii</h2>
+      <div class="summary-items">
+        <div class="summary-item" *ngFor="let item of cart">
+          <span class="item-name">{{ item.quantity }}x {{ item.name }}</span>
+          <span class="item-price">{{ formatPrice(item.price * item.quantity) }}</span>
+        </div>
+      </div>
+      
+      <div class="summary-totals">
+        <div class="total-line">
+          <span>Subtotal ({{ totalItems }} produse):</span>
+          <span>{{ formatPrice(subtotal) }}</span>
+        </div>
+        <div class="total-line">
+          <span>Taxa de serviciu:</span>
+          <span>{{ formatPrice(serviceFee) }}</span>
+        </div>
+        <div class="total-line">
+          <span>TVA (10%):</span>
+          <span>{{ formatPrice(taxAmount) }}</span>
+        </div>
+        <div class="total-line final-total">
+          <span><strong>Total:</strong></span>
+          <span><strong>{{ formatPrice(finalTotal) }}</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty Cart Warning -->
+    <div class="empty-cart-warning" *ngIf="cart.length === 0">
+      <div class="warning-icon">⚠️</div>
+      <h3>Coșul este gol</h3>
+      <p>Te rugăm să adaugi produse în coș înainte de a finaliza comanda.</p>
+      <button (click)="goBackToMenu()" class="btn btn-primary">
+        🍔 Mergi la Meniu
+      </button>
+      
+      <!-- Debug info for empty cart -->
+      <div class="debug-info" *ngIf="isDevelopment()" style="margin-top: 20px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7;">
+        <p><strong>Debug Info:</strong></p>
+        <p>Cart length: {{ cart.length }}</p>
+        <p>Service cart: {{ serviceCartItemCount }}</p>
+        <button (click)="forceReloadCart()" class="debug-btn">Force Reload Cart</button>
+      </div>
+    </div>
+
+    <!-- Customer Form -->
+    <form [formGroup]="customerForm" (ngSubmit)="processOrder()" class="checkout-form" *ngIf="cart.length > 0">
+      
+      <!-- Customer Information -->
+      <div class="form-section">
+        <h2>👤 Informații client</h2>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="firstName">Prenume *</label>
+            <input 
+              id="firstName"
+              type="text" 
+              formControlName="firstName" 
+              class="form-control"
+              [class.error]="isFieldInvalid('firstName')"
+              placeholder="Prenumele tău">
+            <div class="error-message" *ngIf="isFieldInvalid('firstName')">
+              {{ getFieldError('firstName') }}
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="lastName">Nume *</label>
+            <input 
+              id="lastName"
+              type="text" 
+              formControlName="lastName" 
+              class="form-control"
+              [class.error]="isFieldInvalid('lastName')"
+              placeholder="Numele tău">
+            <div class="error-message" *ngIf="isFieldInvalid('lastName')">
+              {{ getFieldError('lastName') }}
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="email">Email *</label>
+            <input 
+              id="email"
+              type="email" 
+              formControlName="email" 
+              class="form-control"
+              [class.error]="isFieldInvalid('email')"
+              placeholder="exemplu@email.com">
+            <div class="error-message" *ngIf="isFieldInvalid('email')">
+              {{ getFieldError('email') }}
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="phone">Telefon *</label>
+            <input 
+              id="phone"
+              type="tel" 
+              formControlName="phone" 
+              class="form-control"
+              [class.error]="isFieldInvalid('phone')"
+              placeholder="+40 123 456 789">
+            <div class="error-message" *ngIf="isFieldInvalid('phone')">
+              {{ getFieldError('phone') }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment Method -->
+      <div class="form-section">
+        <h2>💳 Metodă de plată</h2>
+        
+        <div class="payment-options">
+          <label 
+            *ngFor="let method of paymentMethods" 
+            class="payment-option"
+            [class.selected]="selectedPaymentMethod === method.id">
+            <input 
+              type="radio" 
+              [value]="method.id"
+              (change)="selectPaymentMethod(method.id)"
+              name="paymentMethod">
+            <span class="payment-icon">{{ method.icon }}</span>
+            <div class="payment-info">
+              <span class="payment-name">{{ method.name }}</span>
+              <span class="payment-description">{{ method.description }}</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Card Details (if card payment selected) -->
+      <div class="form-section" *ngIf="selectedPaymentMethod === 'card'">
+        <h2>💳 Detalii card</h2>
+        
+        <div class="form-group">
+          <label for="cardNumber">Numărul cardului *</label>
+          <input 
+            id="cardNumber"
+            type="text" 
+            formControlName="cardNumber" 
+            class="form-control"
+            [class.error]="isFieldInvalid('cardNumber')"
+            placeholder="1234 5678 9012 3456"
+            (input)="formatCardNumber($event)"
+            maxlength="19">
+          <div class="card-type" *ngIf="customerForm.get('cardNumber')?.value">
+            {{ getCardType(customerForm.get('cardNumber')?.value) }}
+          </div>
+          <div class="error-message" *ngIf="isFieldInvalid('cardNumber')">
+            {{ getFieldError('cardNumber') }}
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="expiryDate">Data expirării *</label>
+            <input 
+              id="expiryDate"
+              type="text" 
+              formControlName="expiryDate" 
+              class="form-control"
+              [class.error]="isFieldInvalid('expiryDate')"
+              placeholder="MM/AA"
+              (input)="formatExpiryDate($event)"
+              maxlength="5">
+            <div class="error-message" *ngIf="isFieldInvalid('expiryDate')">
+              {{ getFieldError('expiryDate') }}
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="cvv">CVV *</label>
+            <input 
+              id="cvv"
+              type="text" 
+              formControlName="cvv" 
+              class="form-control"
+              [class.error]="isFieldInvalid('cvv')"
+              placeholder="123"
+              maxlength="4">
+            <div class="error-message" *ngIf="isFieldInvalid('cvv')">
+              {{ getFieldError('cvv') }}
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="cardName">Numele pe card *</label>
+          <input 
+            id="cardName"
+            type="text" 
+            formControlName="cardName" 
+            class="form-control"
+            [class.error]="isFieldInvalid('cardName')"
+            placeholder="NUME PRENUME">
+          <div class="error-message" *ngIf="isFieldInvalid('cardName')">
+            {{ getFieldError('cardName') }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Special Requests -->
+      <div class="form-section">
+        <h2>📝 Cerințe speciale</h2>
+        
+        <div class="form-group">
+          <label for="specialRequests">Ai cerințe speciale sau alergii alimentare?</label>
+          <textarea 
+            id="specialRequests"
+            formControlName="specialRequests" 
+            class="form-control"
+            rows="3"
+            placeholder="Opțional: Menționează orice alergii, preferințe sau instrucțiuni speciale..."></textarea>
+        </div>
+      </div>
+
+      <!-- Terms and Conditions -->
+      <div class="form-section">
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input 
+              type="checkbox" 
+              formControlName="acceptTerms"
+              [class.error]="isFieldInvalid('acceptTerms')">
+            <span class="checkmark"></span>
+            Accept <a href="#" target="_blank">termenii și condițiile</a> *
+          </label>
+          <div class="error-message" *ngIf="isFieldInvalid('acceptTerms')">
+            {{ getFieldError('acceptTerms') }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <div class="form-actions">
+        <button 
+          type="button" 
+          (click)="goBackToCart()" 
+          class="btn btn-secondary">
+          ← Înapoi la Coș
+        </button>
+        
+        <button 
+          type="submit" 
+          class="btn btn-primary"
+          [disabled]="customerForm.invalid || !selectedPaymentMethod || isProcessingPayment">
+          <span *ngIf="!isProcessingPayment">🛒 Finalizează Comanda</span>
+          <span *ngIf="isProcessingPayment">⏳ Se procesează...</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .checkout-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 20px;
+  }
+
+  .checkout-header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .checkout-header h1 {
+    margin: 10px 0;
+    color: #333;
+  }
+
+  .back-btn {
+    background: transparent;
+    border: 2px solid #6c757d;
+    color: #6c757d;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 20px;
+  }
+
+  .back-btn:hover {
+    background: #6c757d;
+    color: white;
+  }
+
+  .debug-panel {
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+
+  .debug-btn {
+    padding: 5px 10px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin: 2px;
+  }
+
+  .debug-btn:hover {
+    background: #0056b3;
+  }
+
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .loading-spinner {
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    text-align: center;
+  }
+
+  .spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #007bff;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .order-confirmation {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .confirmation-content {
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  }
+
+  .success-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+  }
+
+  .order-details {
+    margin: 30px 0;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+  }
+
+  .order-number {
+    font-size: 1.2rem;
+    color: #007bff;
+    margin-bottom: 10px;
+  }
+
+  .confirmation-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .order-summary {
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  }
+
+  .summary-items {
+    margin-bottom: 20px;
+  }
+
+  .summary-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #f8f9fa;
+  }
+
+  .summary-totals {
+    border-top: 2px solid #e9ecef;
+    padding-top: 15px;
+  }
+
+  .total-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+  }
+
+  .final-total {
+    font-size: 1.2rem;
+    color: #007bff;
+    border-top: 1px solid #e9ecef;
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+
+  .empty-cart-warning {
+    text-align: center;
+    padding: 60px 20px;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  }
+
+  .warning-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+  }
+
+  .checkout-form {
+    max-width: 600px;
+    margin: 0 auto;
+    background: white;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  }
+
+  .form-section {
+    margin-bottom: 30px;
+  }
+
+  .form-section h2 {
+    margin-bottom: 20px;
+    color: #333;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 10px;
+  }
+
+  .form-row {
+    display: flex;
+    gap: 20px;
+  }
+
+  .form-group {
+    flex: 1;
+    margin-bottom: 20px;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #555;
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: border-color 0.3s ease;
+    box-sizing: border-box;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: #007bff;
+  }
+
+  .form-control.error {
+    border-color: #dc3545;
+  }
+
+  .error-message {
+    color: #dc3545;
+    font-size: 14px;
+    margin-top: 5px;
+  }
+
+  .payment-options {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .payment-option {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+  }
+
+  .payment-option:hover {
+    border-color: #007bff;
+    background: #f8f9fa;
+  }
+
+  .payment-option.selected {
+    border-color: #007bff;
+    background: #e3f2fd;
+  }
+
+  .payment-option input[type="radio"] {
+    margin: 0;
+  }
+
+  .payment-icon {
+    font-size: 28px;
+    min-width: 40px;
+  }
+
+  .payment-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .payment-name {
+    font-weight: 600;
+    color: #333;
+  }
+
+  .payment-description {
+    font-size: 14px;
+    color: #666;
+  }
+
+  .card-type {
+    font-size: 12px;
+    color: #007bff;
+    margin-top: 5px;
+    font-weight: 600;
+  }
+
+  .checkbox-group {
+    margin-top: 20px;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    line-height: 1.5;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    margin-top: 3px;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 20px;
+    justify-content: space-between;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #e9ecef;
+  }
+
+  .btn {
+    padding: 12px 24px;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    flex: 1;
+    text-align: center;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,123,255,0.4);
+  }
+
+  .btn-primary:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: #6c757d;
+    border: 2px solid #e9ecef;
+  }
+
+  .btn-secondary:hover {
+    background: #f8f9fa;
+    border-color: #dee2e6;
+  }
+
+  .debug-info {
+    border-radius: 8px;
+    font-size: 14px;
+  }
+
+  .debug-info p {
+    margin: 5px 0;
+  }
+
+  /* Mobile Optimizations */
+  @media (max-width: 768px) {
+    .checkout-container {
+      padding: 15px;
+    }
+    
+    .form-row {
+      flex-direction: column;
+    }
+    
+    .checkout-form {
+      padding: 20px;
+    }
+    
+    .form-actions {
+      flex-direction: column;
+    }
+
+    .confirmation-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .payment-option {
+      padding: 15px;
+    }
+
+    .payment-icon {
+      font-size: 24px;
+      min-width: 35px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .checkout-header h1 {
+      font-size: 1.5rem;
+    }
+
+    .success-icon, .warning-icon {
+      font-size: 3rem;
+    }
+
+    .order-details {
+      padding: 15px;
+    }
+
+    .payment-info {
+      gap: 3px;
+    }
+
+    .payment-name {
+      font-size: 14px;
+    }
+
+    .payment-description {
+      font-size: 12px;
+    }
+  }
+
+  /* Romanian-specific styles */
+  .romanian-text {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  /* Success animations */
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .order-confirmation {
+    animation: slideInUp 0.5s ease-out;
+  }
+
+  /* Payment method selection animation */
+  .payment-option {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .payment-option::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0,123,255,0.1), transparent);
+    transition: left 0.5s;
+  }
+
+  .payment-option.selected::before {
+    left: 100%;
+  }
+
+  /* Focus styles for accessibility */
+  .form-control:focus,
+  .btn:focus,
+  .payment-option:focus,
+  .checkbox-label:focus {
+    outline: 3px solid rgba(0,123,255,0.3);
+    outline-offset: 2px;
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .form-control,
+    .payment-option,
+    .btn {
+      border-width: 3px;
+    }
+    
+    .btn-primary {
+      background: #0056b3;
+    }
+  }
+</style>
